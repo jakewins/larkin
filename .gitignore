@@ -1,17 +1,10 @@
 .devenv*
 devenv.local.nix
-.buckconfig.local
-.pants*
 
 target/
-buck-*
 
 __pycache__/
 .venv/
-
-# ESP-IDF toolchain + build artifacts (local to each machine)
-local/
-wares/firm/build/
 
 # LLM plans
 .plans/

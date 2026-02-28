@@ -1,0 +1,21 @@
+[project]
+name = "larkin"
+version = "0.0.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "google-genai>=1.16.1",
+    "httpx>=0.28.1",
+    "markdownify>=1.2.2",
+    "markitdown[pdf]>=0.1.5",
+    "rich>=14.3.3",
+    "starlark-pyo3>=2.3.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.4",
+    "ty>=0.0.19",
+]
