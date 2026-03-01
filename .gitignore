@@ -6,5 +6,10 @@ target/
 __pycache__/
 .venv/
 
+.hypothesis
+
 # LLM plans
 .plans/
+
+# Temp scratch files
+tmp/

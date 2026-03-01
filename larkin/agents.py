@@ -1,4 +1,4 @@
-from larkin import display, memory, models, prompts, scripting
+from larkin import display, memory, models, prompts, scripting, tools
 
 
 class Agent:
@@ -6,14 +6,24 @@ class Agent:
         self,
         system_prompt: str,
         model: models.Model,
-        max_steps=64,
-        planning_interval=16,
+        tool_functions: list[tools.Tool] | None = None,
+        max_steps: int = 64,
+        planning_interval: int = 16,
     ):
+        resolved_tools: list[tools.Tool] = (
+            tool_functions if tool_functions is not None else tools.default_tools(model)
+        )
+
         self.max_steps = max_steps
         self.model = model
-        self.memory = memory.AgentMemory(system_prompt)
-        self.workspace = scripting.ScriptWorkspace()
         self.planning_interval = planning_interval
+
+        # Inject auto-generated tool docs into the system prompt
+        tool_docs = tools.generate_tool_docs(resolved_tools)
+        populated_prompt = system_prompt.replace("{{tool_docs}}", tool_docs)
+        self.memory = memory.AgentMemory(populated_prompt)
+
+        self.workspace = scripting.ScriptWorkspace(resolved_tools)
 
     def run(self, task: str) -> str:
         self.memory.steps.append(memory.TaskStep(task))
@@ -79,7 +89,10 @@ class Agent:
 
 
 if __name__ == "__main__":
-    agent = Agent(prompts.SYSTEM_PROMPT, model=models.GoogleModel("gemini-2.5-pro"))
+    from larkin.models.google import GoogleModel
+
+    m = GoogleModel("gemini-2.5-pro")
+    agent = Agent(prompts.SYSTEM_PROMPT, model=m)
     agent.run(
         "Find the result of summarizing 452324562364, 124151435 ans 1242534 and then dividing that by 12"
     )

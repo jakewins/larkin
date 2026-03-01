@@ -1,65 +1,18 @@
-import enum
-import dataclasses
-import typing as t
 import time
-from google import genai
-import google.genai.types
+
+import google.genai
 import google.genai.errors
+import google.genai.types
 
-
-class MessageRole(str, enum.Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    SYSTEM = "system"
-    CODE_EXEC = "code-exec"
-    CODE_RESULT = "code-result"
-
-    @classmethod
-    def roles(cls):
-        return [r.value for r in cls]
-
-
-@dataclasses.dataclass
-class TextContent:
-    text: str
-    # Used by things like the google model to attach "thought" metadata that needs to be returned for history to work
-    meta: dict[str, t.Any] = dataclasses.field(default_factory=dict)
-
-
-@dataclasses.dataclass
-class CodeContent:
-    thought: str
-    code: str
-    # See TextContent
-    meta: dict[str, t.Any] = dataclasses.field(default_factory=dict)
-
-
-@dataclasses.dataclass
-class CodeSuccess:
-    observations: str
-    # See TextContent
-    meta: dict[str, t.Any] = dataclasses.field(default_factory=dict)
-
-
-@dataclasses.dataclass
-class CodeError:
-    # Error is expected to contain the observations as well, if any executed before the error
-    error: str
-    # See TextContent
-    meta: dict[str, t.Any] = dataclasses.field(default_factory=dict)
-
-
-@dataclasses.dataclass
-class ChatMessage:
-    role: MessageRole
-    content: list[TextContent | CodeContent | CodeSuccess | CodeError]
-
-
-class Model(t.Protocol):
-    def generate(
-        self, messages: list[ChatMessage], with_code_tool=True
-    ) -> ChatMessage: ...
-
+from larkin.models import (
+    ChatMessage,
+    CodeContent,
+    CodeError,
+    CodeSuccess,
+    MessageRole,
+    Model,
+    TextContent,
+)
 
 STARLARK_TOOL_SCHEMA = google.genai.types.FunctionDeclaration(
     name="exec_starlark",
@@ -83,10 +36,12 @@ STARLARK_TOOL_SCHEMA = google.genai.types.FunctionDeclaration(
 
 class GoogleModel(Model):
     def __init__(self, model: str = "gemini-2.5-flash"):
-        self.client = genai.Client()
+        self.client = google.genai.Client()
         self.model = model
 
-    def generate(self, messages: list[ChatMessage], with_code_tool=True) -> ChatMessage:
+    def generate(
+        self, messages: list[ChatMessage], with_code_tool: bool = True
+    ) -> ChatMessage:
         # If there's a system prompt, provide that in the dedicated argument, this
         # supposedly hardens it against injection (LOL ok bro) and improves caching
         match messages[0]:
@@ -118,6 +73,7 @@ class GoogleModel(Model):
                 )
                 break
             except google.genai.errors.ServerError:
+                # TODO actual handling
                 print("llm server error, sleeping")
                 time.sleep(30)
 
@@ -189,11 +145,14 @@ class GoogleModel(Model):
         )
 
     @staticmethod
-    def _part_from_content(content: TextContent | CodeContent | CodeSuccess | CodeError) -> google.genai.types.Part:
+    def _part_from_content(
+        content: TextContent | CodeContent | CodeSuccess | CodeError,
+    ) -> google.genai.types.Part:
         match content:
             case TextContent(text=text, meta=meta):
                 return google.genai.types.Part(
-                    text=text, thought_signature=meta.get("google.thought_signature")
+                    text=text,
+                    thought_signature=meta.get("google.thought_signature"),
                 )
             case CodeContent(thought=thought, code=code, meta=meta):
                 return google.genai.types.Part(

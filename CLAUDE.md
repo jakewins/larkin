@@ -28,6 +28,27 @@ Larkin is an agentic AI framework. An LLM generates Starlark code to accomplish 
 
 **Display** (`display.py`): Rich terminal output for step results and final answers.
 
+## Software principles
+
+We write pragmatic, maintainable code, in the spirit of the Go proverbs.
+We document our code well, but in the tradition of codebases like Postgres and Kubernetes, not in the pointless manner of Java codebases. We let the functions type signature document the arguments and return format, and instead write docs and comments that describe - where necessary - context, reasoning, reasons for not doing some obvious alternative approach etc.
+
+We heavily leverage python typing, writing Python as if it's Rust:
+
+- Dataclasses over dicts & tuples
+- Match statements
+- Composition over inheritance
+- Protocols over subclasses
+- Algebraic datatypes via unions
+- Newtypes, in reasonable amounts (often a "naked" primitive is fine, see pragmatism)
+- Broadly the style recommended here: https://kobzol.github.io/rust/python/2023/05/20/writing-python-like-its-rust.html
+- Factory functions in the `from_xxx`, `to_xxx` style; constructors should generally be infallible
+- Parse, don't validate
+- Structured concurrency via TaskGroups
+- Put tests close to the code they test, foo.py is tested by foo_test.py in same dir
+- Prefer fast "broad" tests at system edges, letting us lean on the test suite for refactoring rather than tests breaking anytime innards change.
+- No mocking libraries, stub in pure python. Pure python stubs are easy to understand and can have breakpoints in debuggers.
+
 ## Key Design Details
 
 - When the model responds with plain text instead of a tool call, `Agent._execute()` wraps it in a synthetic `final_answer()` call.
