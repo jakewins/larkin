@@ -4,8 +4,8 @@ from larkin import display, memory, models, prompts, scripting, tools
 class Agent:
     def __init__(
         self,
-        system_prompt: str,
         model: models.Model,
+        system_prompt: str = prompts.SYSTEM_PROMPT,
         tool_functions: list[tools.Tool] | None = None,
         max_steps: int = 64,
         planning_interval: int = 16,
