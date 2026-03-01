@@ -189,7 +189,9 @@ class GoogleModel(Model):
         )
 
     @staticmethod
-    def _part_from_content(content: TextContent | CodeContent | CodeSuccess | CodeError) -> google.genai.types.Part:
+    def _part_from_content(
+        content: TextContent | CodeContent | CodeSuccess | CodeError,
+    ) -> google.genai.types.Part:
         match content:
             case TextContent(text=text, meta=meta):
                 return google.genai.types.Part(

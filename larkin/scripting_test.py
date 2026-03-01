@@ -1,15 +1,20 @@
-from larkin import scripting
+from larkin import scripting, tools
+
+
+def _ws(*extra_tools: tools.ToolFunction) -> scripting.ScriptWorkspace:
+    """Create a workspace with the given tools (or no tools for pure Starlark tests)."""
+    return scripting.ScriptWorkspace(list(extra_tools))
 
 
 def test_web_search():
-    res = scripting.ScriptWorkspace().eval(
+    res = _ws(tools.web_search).eval(
         "shops = web_search('garden shops selling apple trees near New York City')\nprint(shops)"
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
 
 
 def test_top_level_for_loop():
-    res = scripting.ScriptWorkspace().eval(
+    res = _ws().eval(
         "items = []\nfor i in range(3):\n    items.append(i)\nprint(items)\n"
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
@@ -22,7 +27,7 @@ def test_extract_links():
         "[GitHub](https://github.com) for more info.\n"
         "Also see [Docs](https://docs.example.com/path?q=1)."
     )
-    res = scripting.ScriptWorkspace().eval(
+    res = _ws(tools.extract_links).eval(
         f"links = extract_links({md!r})\nprint(links)\n"
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
@@ -36,7 +41,7 @@ def test_extract_links_bare_urls():
         "Visit [Google](https://google.com) or "
         "just go to <https://bare-link.example.com> for more."
     )
-    res = scripting.ScriptWorkspace().eval(
+    res = _ws(tools.extract_links).eval(
         f"links = extract_links({md!r})\nprint(links)\n"
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
@@ -46,7 +51,7 @@ def test_extract_links_bare_urls():
 
 
 def test_visit_webpage():
-    res = scripting.ScriptWorkspace().eval(
+    res = _ws(tools.visit_webpage).eval(
         "content = visit_webpage('https://www.google.com')\nprint(len(content) > 0)\n"
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
@@ -54,8 +59,7 @@ def test_visit_webpage():
 
 
 def test_download_pdf():
-    ws = scripting.ScriptWorkspace()
-    res = ws.eval("""
+    res = _ws(tools.download_pdf).eval("""
 pdf_content = download_pdf(url='https://pdfobject.com/pdf/sample.pdf')
 print(pdf_content)
 """)
