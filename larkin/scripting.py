@@ -6,7 +6,7 @@ from typing import NoReturn
 
 import starlark as sl
 
-from larkin.tools import OpaquePolicy, OpaqueValue, Tool
+from larkin.tools import OpaquePolicy, OpaqueValue, Tool, FunctionTool
 
 
 @dataclasses.dataclass
@@ -76,25 +76,12 @@ class ScriptWorkspace:
 
         # Always-available builtins
         def _print(*args: object) -> None:
-            for arg in args:
-                if _contains_opaque(arg):
-                    raise ValueError(
-                        "Cannot print opaque values — use opaque_categorize to "
-                        "extract information from opaque content"
-                    )
             self.prints.append(str(args[0]) if len(args) == 1 else str(args))
-
-        self.mod.add_callable("print", _print)
+        self.mod.add_callable("print", _make_validated_wrapper(FunctionTool.from_function(_print)))
 
         def final_answer(answer: str) -> None:
-            if _contains_opaque(answer):
-                raise ValueError(
-                    "Cannot pass opaque values to final_answer — use "
-                    "opaque_categorize to extract information first"
-                )
             self.final_answer = answer
-
-        self.mod.add_callable("final_answer", final_answer)
+        self.mod.add_callable("final_answer", _make_validated_wrapper(FunctionTool.from_function(final_answer)))
 
         def load(name: str) -> NoReturn:
             raise FileNotFoundError("loading is not available")

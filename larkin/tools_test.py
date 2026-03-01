@@ -1,6 +1,7 @@
-from larkin import tools
+from larkin import tools, scripting
 from larkin.tools import Tool, FunctionTool, ToolParam, generate_tool_docs
 
+from larkin.scripting_test import _ws
 
 # ---------------------------------------------------------------------------
 # Tool.from_function / FunctionTool.from_function introspection tests
@@ -87,68 +88,58 @@ def test_generate_tool_docs_multiline_docstring():
     assert "Search the web." in docs
     assert "Returns a list of results." in docs
 
-
-# ---------------------------------------------------------------------------
-# Custom Tool via protocol conformance (no inheritance)
-# ---------------------------------------------------------------------------
-
-
-def test_custom_tool_protocol():
-    """A hand-built object satisfying the Tool protocol works with generate_tool_docs."""
-
-    class MyTool:
-        name = "magic"
-        description = "Do magic things."
-        parameters = [ToolParam("spell", "str")]
-        return_type = "str"
-
-        def __call__(self, spell: str) -> str:
-            return f"cast {spell}"
-
-    docs = generate_tool_docs([MyTool()])  # type: ignore[list-item]
-    assert "def magic(spell: str) -> str:" in docs
-    assert "Do magic things." in docs
+# Built-in tool tests
+# We test the full script harness because it's just as fast, and gives us much better coverage, making sure the tools
+# work in the actual scripting env.
 
 
-# ---------------------------------------------------------------------------
-# Built-in tool direct tests
-# ---------------------------------------------------------------------------
-
-
-def test_extract_links_direct():
+def test_extract_links():
     md = (
         "Check out [Google](https://google.com) and "
         "[GitHub](https://github.com) for more info.\n"
-        "Also see <https://bare.example.com>."
+        "Also see [Docs](https://docs.example.com/path?q=1)."
     )
-    result = tools.extract_links(md)
-    assert result == [
-        ("Google", "https://google.com"),
-        ("GitHub", "https://github.com"),
-        ("https://bare.example.com", "https://bare.example.com"),
+    res = _ws(tools.EXTRACT_LINKS).eval(
+        f"links = extract_links({md!r})\nprint(links)\n"
+    )
+    assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
+    assert res.prints == [
+        "[['Google', 'https://google.com'], ['GitHub', 'https://github.com'], ['Docs', 'https://docs.example.com/path?q=1']]"
     ]
 
 
-def test_builtin_tool_objects():
-    """Module-level Tool objects have correct metadata."""
-    assert tools.VISIT_WEBPAGE.name == "visit_webpage"
-    assert tools.VISIT_WEBPAGE.parameters == [ToolParam("url", "str")]
-    assert tools.VISIT_WEBPAGE.return_type == "str"
-    assert "webpage" in tools.VISIT_WEBPAGE.description.lower()
-
-    assert tools.EXTRACT_LINKS.name == "extract_links"
-    assert tools.EXTRACT_LINKS.parameters == [ToolParam("markdown", "str")]
-
-
-def test_generate_docs_for_builtin_tools():
-    """Doc generation works on the module-level Tool objects."""
-    docs = generate_tool_docs(
-        [
-            tools.VISIT_WEBPAGE,
-            tools.DOWNLOAD_PDF,
-            tools.EXTRACT_LINKS,
-        ]
+def test_extract_links_bare_urls():
+    md = (
+        "Visit [Google](https://google.com) or "
+        "just go to <https://bare-link.example.com> for more."
     )
-    assert "def visit_webpage(url: str) -> str:" in docs
-    assert "def download_pdf(url: str) -> str:" in docs
-    assert "def extract_links(markdown: str)" in docs
+    res = _ws(tools.EXTRACT_LINKS).eval(
+        f"links = extract_links({md!r})\nprint(links)\n"
+    )
+    assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
+    assert res.prints == [
+        "[['Google', 'https://google.com'], ['https://bare-link.example.com', 'https://bare-link.example.com']]"
+    ]
+
+def test_web_search():
+    res = _ws(tools.WEB_SEARCH).eval(
+        "shops = web_search('garden shops selling apple trees near New York City')\nprint(shops)"
+    )
+    assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
+
+
+def test_visit_webpage():
+    res = _ws(tools.VISIT_WEBPAGE).eval(
+        "content = visit_webpage('https://www.google.com')\nprint(len(content) > 0)\n"
+    )
+    assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
+    assert res.prints == ["True"]
+
+
+def test_download_pdf():
+    res = _ws(tools.DOWNLOAD_PDF).eval("""
+pdf_content = download_pdf(url='https://pdfobject.com/pdf/sample.pdf')
+print(pdf_content)
+""")
+    assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
+    assert "Sample PDF" in res.prints[0]
