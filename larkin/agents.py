@@ -1,4 +1,5 @@
-from larkin import display, memory, models, prompts, scripting, tools
+from larkin import display, memory, models, prompts, scripting
+from larkin.tools import Tool, generate_tool_docs
 
 
 class Agent:
@@ -6,20 +7,23 @@ class Agent:
         self,
         model: models.Model,
         system_prompt: str = prompts.SYSTEM_PROMPT,
-        tool_functions: list[tools.Tool] | None = None,
+        tool_functions: list[Tool] | None = None,
         max_steps: int = 64,
         planning_interval: int = 16,
     ):
-        resolved_tools: list[tools.Tool] = (
-            tool_functions if tool_functions is not None else tools.default_tools(model)
-        )
+        if tool_functions is not None:
+            resolved_tools = tool_functions
+        else:
+            from larkin.tools.extras import default_tools
+
+            resolved_tools = default_tools(model)
 
         self.max_steps = max_steps
         self.model = model
         self.planning_interval = planning_interval
 
         # Inject auto-generated tool docs into the system prompt
-        tool_docs = tools.generate_tool_docs(resolved_tools)
+        tool_docs = generate_tool_docs(resolved_tools)
         populated_prompt = system_prompt.replace("{{tool_docs}}", tool_docs)
         self.memory = memory.AgentMemory(populated_prompt)
 
