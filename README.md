@@ -1,9 +1,10 @@
 # Larkin
 
-Hermetic ultralight agents. 
+Hermetic blinded agents
 
-- Sandboxing via in-process Starlark interpreter means fast, low overhead, no-frills safety
-- "Opaque values" lets agents manipulate untrusted strings while ensuring LLM cannot see content
+- Lightweight code agent lib inspired by [smolagents](https://github.com/huggingface/smolagents)
+- Sandboxing via in-process Starlark interpreter brings fast, minimum-overhead hermetic execution
+- "Blinded" agents can manipulate untrusted string content without seeing the values
 
 | :zap:        This is an unaudited proof-of-concept, buyer beware |
 |------------------------------------------------------------------|
@@ -20,23 +21,17 @@ agent.run(
 )
 ```
 
-
 ## Longer description
 
-This is experimental, not production ready, but fun!
+This is an experimental python library that lets you write, buzzword bingo, "hermetic blinded agents".
+In the same manner as smolagents and many others, Larkin agents run tools by writing code.
 
-This is a python library that lets you write "code agents" - agents that invoke tools by writing small scripts. 
-This lets the agent do lots of complex work in each tool invocation, and avoid loading large amounts of text into its context window. 
+As Starlark is implemented to be "hermetically sealed" for its original purpose of a hermetic build system, it works brilliantly as a sandbox environment.
+Using Starlark lets Larkin offer sandboxing without containers or VMs, instead it runs an ultralight in-process Starlark interpreter.
 
-The code is, essentially, Python, and is hermetically sandboxed in an in-process Starlark interpreter. 
-This means Larkin doesn't need to start Docker containers or VMs, keeping its footprint light and security surface easier to audit. 
-
-Larkin tools can declare the data they return as "opaque".
-Opaque values can be manipulated by the agent in Starlark, but they cannot be *read* by the agent. 
-Instead the agent needs to work with this "opaque" data by passing it to tools that accept opaque values - for instance, tools that answer questions about the opaque data and respond with fixed categories. 
-
-Heavily inspired by [smolagents](https://github.com/huggingface/smolagents).
-
+Larkin agents can optionally be **blinded**, allowing agents to work with dangerous - prompt-injection-filled - text without seeing the text content.
+This is done by declaring tools that produce and consume "Opaque Values".
+The agent combines tools to work with the values, and the runtime ensures there is no ability for the agent to access the actual text.
 
 ## Example with untrusted data
 
@@ -118,6 +113,7 @@ agent.run(
     """
 )
 ```
+
 ## Hacking
 
 ```
