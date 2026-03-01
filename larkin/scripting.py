@@ -82,8 +82,8 @@ class ScriptWorkspace:
             "print", _make_validated_wrapper(FunctionTool.from_function(_print))
         )
 
-        def final_answer(answer: str) -> None:
-            self.final_answer = answer
+        def final_answer(answer: object) -> None:
+            self.final_answer = str(answer)
 
         self.mod.add_callable(
             "final_answer",
