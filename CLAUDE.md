@@ -45,6 +45,9 @@ We heavily leverage python typing, writing Python as if it's Rust:
 - Factory functions in the `from_xxx`, `to_xxx` style; constructors should generally be infallible
 - Parse, don't validate
 - Structured concurrency via TaskGroups
+- Put tests close to the code they test, foo.py is tested by foo_test.py in same dir
+- Prefer fast "broad" tests at system edges, letting us lean on the test suite for refactoring rather than tests breaking anytime innards change.
+- No mocking libraries, stub in pure python. Pure python stubs are easy to understand and can have breakpoints in debuggers.
 
 ## Key Design Details
 

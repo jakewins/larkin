@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 import inspect
 import io
 import json
@@ -18,14 +19,62 @@ MAX_TOOL_OUTPUT = 30_000
 
 
 # ---------------------------------------------------------------------------
+# Opaque value type
+# ---------------------------------------------------------------------------
+
+
+class OpaqueValue:
+    """A value that is opaque to the LLM agent — it can be passed between tools
+    but never inspected, printed, or used as a string.
+
+    Tools that return OpaqueValue produce handles the agent can store and forward
+    to other opaque-aware tools, but the agent's Starlark code cannot read the
+    contents.  Tools that accept OpaqueValue parameters declare so via their type
+    annotations; the ScriptWorkspace enforces that opaque values only reach those
+    parameters.
+    """
+
+    __slots__ = ("_value",)
+
+    def __init__(self, value: object):
+        self._value = value
+
+    @property
+    def value(self) -> object:
+        return self._value
+
+    def __str__(self) -> str:
+        return "<opaque value>"
+
+    def __repr__(self) -> str:
+        return "OpaqueValue(<redacted>)"
+
+
+# ---------------------------------------------------------------------------
 # Tool protocol and concrete implementation
 # ---------------------------------------------------------------------------
+
+
+class OpaquePolicy(enum.Enum):
+    """Declares how a tool parameter interacts with OpaqueValue.
+
+    REJECT: no opaque values allowed anywhere in the argument (recursive check).
+    SCALAR: the parameter itself is an OpaqueValue.
+    IN_LIST: the parameter is list[OpaqueValue].
+    IN_DICT: the parameter is dict[K, OpaqueValue].
+    """
+
+    REJECT = "reject"
+    SCALAR = "scalar"
+    IN_LIST = "in_list"
+    IN_DICT = "in_dict"
 
 
 @dataclasses.dataclass(frozen=True)
 class ToolParam:
     name: str
     type: str
+    opaque_policy: OpaquePolicy = OpaquePolicy.REJECT
 
 
 class Tool(t.Protocol):
@@ -65,6 +114,19 @@ def _annotation_str(annotation: t.Any) -> str:
     if hasattr(annotation, "__name__"):
         return annotation.__name__
     return str(annotation).replace("typing.", "")
+
+
+def _opaque_policy_from_annotation(annotation: t.Any) -> OpaquePolicy:
+    """Derive the OpaquePolicy for a parameter from its type annotation."""
+    if annotation is OpaqueValue:
+        return OpaquePolicy.SCALAR
+    origin = t.get_origin(annotation)
+    args = t.get_args(annotation)
+    if origin is list and args and args[0] is OpaqueValue:
+        return OpaquePolicy.IN_LIST
+    if origin is dict and len(args) >= 2 and args[1] is OpaqueValue:
+        return OpaquePolicy.IN_DICT
+    return OpaquePolicy.REJECT
 
 
 class FunctionTool:
@@ -113,7 +175,13 @@ class FunctionTool:
         params: list[ToolParam] = []
         for pname, param in sig.parameters.items():
             annotation = hints.get(pname, param.annotation)
-            params.append(ToolParam(name=pname, type=_annotation_str(annotation)))
+            params.append(
+                ToolParam(
+                    name=pname,
+                    type=_annotation_str(annotation),
+                    opaque_policy=_opaque_policy_from_annotation(annotation),
+                )
+            )
 
         ret = hints.get("return", sig.return_annotation)
         return_type = None if ret is inspect.Parameter.empty else _annotation_str(ret)
@@ -249,6 +317,24 @@ EXTRACT_LINKS = FunctionTool.from_function(extract_links)
 
 
 # ---------------------------------------------------------------------------
+# Opaque built-in tools
+# ---------------------------------------------------------------------------
+
+
+def opaque_visit_webpage(url: str) -> OpaqueValue:
+    """Visit a webpage and return its contents as an opaque handle.
+
+    The returned value cannot be printed or passed to tools that expect strings.
+    Use opaque_categorize to extract structured information from the content.
+    """
+    content = visit_webpage(url)
+    return OpaqueValue(content)
+
+
+OPAQUE_VISIT_WEBPAGE = FunctionTool.from_function(opaque_visit_webpage)
+
+
+# ---------------------------------------------------------------------------
 # Model-dependent tool factories
 # ---------------------------------------------------------------------------
 
@@ -340,6 +426,49 @@ def make_categorize_tool(model: models.Model) -> FunctionTool:
     return FunctionTool.from_function(categorize)
 
 
+def make_opaque_categorize_tool(model: models.Model) -> FunctionTool:
+    """Create a categorize tool that works on opaque content the agent cannot see."""
+
+    def opaque_categorize(
+        instruction: str, opaque_text: OpaqueValue, categories: list[str]
+    ) -> str:
+        """Categorize opaque content per the instruction, without revealing it to you.
+
+        The opaque_text is a handle from opaque_visit_webpage — you cannot read it,
+        but this tool can.  The output will be one of the categories you provide.
+
+        Use this for branching logic on dangerous/untrusted text: ask yes/no questions
+        or pick from a set of labels.
+        """
+        text = str(opaque_text.value)
+        res = model.generate(
+            [
+                models.ChatMessage(
+                    models.MessageRole.SYSTEM,
+                    [models.TextContent(_CATEGORIZATION_SYSTEM_PROMPT)],
+                ),
+                models.ChatMessage(
+                    models.MessageRole.USER,
+                    [
+                        models.TextContent(f"Instruction: {instruction}"),
+                        models.TextContent(f"Categories: {json.dumps(categories)}"),
+                        models.TextContent(f"Text: {text}"),
+                    ],
+                ),
+            ],
+            with_code_tool=False,
+        )
+        assert isinstance(res.content[0], models.TextContent)
+        raw = res.content[0].text.strip()
+        if raw in categories:
+            return raw
+        raise ValueError(
+            f"tool did not pick a valid category: {raw} [categories: {categories}]"
+        )
+
+    return FunctionTool.from_function(opaque_categorize)
+
+
 def default_tools(model: models.Model) -> list[Tool]:
     """Return the default set of tools for an agent."""
     return [
@@ -347,6 +476,8 @@ def default_tools(model: models.Model) -> list[Tool]:
         DOWNLOAD_PDF,
         WEB_SEARCH,
         EXTRACT_LINKS,
+        OPAQUE_VISIT_WEBPAGE,
         make_analyze_tool(model),
         make_categorize_tool(model),
+        make_opaque_categorize_tool(model),
     ]
