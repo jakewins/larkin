@@ -174,6 +174,15 @@ class FunctionTool:
 
         params: list[ToolParam] = []
         for pname, param in sig.parameters.items():
+            if param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            ):
+                raise ValueError(
+                    f"from_function does not support *args/**kwargs "
+                    f"(found '{pname}' in {getattr(fn, '__name__', '?')}). "
+                    f"Declare all parameters explicitly."
+                )
             annotation = hints.get(pname, param.annotation)
             params.append(
                 ToolParam(

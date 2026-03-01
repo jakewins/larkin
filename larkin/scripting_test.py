@@ -13,6 +13,7 @@ def _ws(*extra_tools: tools.Tool) -> scripting.ScriptWorkspace:
 
 SECRET_SENTINEL = "TOP SECRET DATA"
 
+
 def _get_secret() -> OpaqueValue:
     """Return an opaque handle wrapping secret data."""
     return OpaqueValue("TOP SECRET DATA")
@@ -70,35 +71,35 @@ def test_opaque_cannot_be_printed():
     res = _ws(_GET_SECRET).eval("x = _get_secret()\nprint(x)")
     assert isinstance(res, scripting.ScriptError), f"Expected ScriptError, got: {res}"
     assert SECRET_SENTINEL not in res.error
-    assert SECRET_SENTINEL not in "\n".join(res.prints) 
+    assert SECRET_SENTINEL not in "\n".join(res.prints)
 
 
 def test_opaque_cannot_be_printed_sneaky():
     res = _ws(_GET_SECRET).eval("x = _get_secret()\nprint('dont worry', x)")
     assert isinstance(res, scripting.ScriptError), f"Expected ScriptError, got: {res}"
     assert SECRET_SENTINEL not in res.error
-    assert SECRET_SENTINEL not in "\n".join(res.prints) 
+    assert SECRET_SENTINEL not in "\n".join(res.prints)
 
 
 def test_opaque_in_list_cannot_be_printed():
     res = _ws(_GET_SECRET).eval("x = _get_secret()\nprint([x, 1, 2])")
     assert isinstance(res, scripting.ScriptError), f"Expected ScriptError, got: {res}"
     assert SECRET_SENTINEL not in res.error
-    assert SECRET_SENTINEL not in "\n".join(res.prints) 
+    assert SECRET_SENTINEL not in "\n".join(res.prints)
 
 
 def test_opaque_cannot_be_final_answered():
     res = _ws(_GET_SECRET).eval("x = _get_secret()\nfinal_answer(x)")
     assert isinstance(res, scripting.ScriptError), f"Expected ScriptError, got: {res}"
     assert SECRET_SENTINEL not in res.error
-    assert SECRET_SENTINEL not in "\n".join(res.prints) 
+    assert SECRET_SENTINEL not in "\n".join(res.prints)
 
 
 def test_opaque_cannot_be_passed_to_str_param():
     res = _ws(_GET_SECRET, _ACCEPT_STR).eval("x = _get_secret()\n_accept_str(x)")
     assert isinstance(res, scripting.ScriptError), f"Expected ScriptError, got: {res}"
     assert SECRET_SENTINEL not in res.error
-    assert SECRET_SENTINEL not in "\n".join(res.prints) 
+    assert SECRET_SENTINEL not in "\n".join(res.prints)
     assert "_accept_str" in res.error
 
 
@@ -191,5 +192,3 @@ def test_top_level_for_loop():
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
     assert res.prints == ["[0, 1, 2]"]
-
-

@@ -88,6 +88,7 @@ def test_generate_tool_docs_multiline_docstring():
     assert "Search the web." in docs
     assert "Returns a list of results." in docs
 
+
 # Built-in tool tests
 # We test the full script harness because it's just as fast, and gives us much better coverage, making sure the tools
 # work in the actual scripting env.
@@ -120,6 +121,7 @@ def test_extract_links_bare_urls():
     assert res.prints == [
         "[['Google', 'https://google.com'], ['https://bare-link.example.com', 'https://bare-link.example.com']]"
     ]
+
 
 def test_web_search():
     res = _ws(tools.WEB_SEARCH).eval(

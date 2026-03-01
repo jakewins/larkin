@@ -75,13 +75,20 @@ class ScriptWorkspace:
             self.mod.add_callable(tool.name, _make_validated_wrapper(tool))
 
         # Always-available builtins
-        def _print(*args: object) -> None:
-            self.prints.append(str(args[0]) if len(args) == 1 else str(args))
-        self.mod.add_callable("print", _make_validated_wrapper(FunctionTool.from_function(_print)))
+        def _print(value: object) -> None:
+            self.prints.append(str(value))
+
+        self.mod.add_callable(
+            "print", _make_validated_wrapper(FunctionTool.from_function(_print))
+        )
 
         def final_answer(answer: str) -> None:
             self.final_answer = answer
-        self.mod.add_callable("final_answer", _make_validated_wrapper(FunctionTool.from_function(final_answer)))
+
+        self.mod.add_callable(
+            "final_answer",
+            _make_validated_wrapper(FunctionTool.from_function(final_answer)),
+        )
 
         def load(name: str) -> NoReturn:
             raise FileNotFoundError("loading is not available")
