@@ -1,4 +1,5 @@
-from larkin import display, memory, models, prompts, scripting
+from larkin import memory, models, prompts, scripting
+from larkin.output import Output, SilentOutput
 from larkin.tools import Tool, generate_tool_docs
 
 
@@ -10,6 +11,7 @@ class Agent:
         tool_functions: list[Tool] | None = None,
         max_steps: int = 64,
         planning_interval: int = 16,
+        output: Output = SilentOutput(),
     ):
         if tool_functions is not None:
             resolved_tools = tool_functions
@@ -20,6 +22,7 @@ class Agent:
 
         self.max_steps = max_steps
         self.model = model
+        self.output = output
         self.planning_interval = planning_interval
 
         # Inject auto-generated tool docs into the system prompt
@@ -35,12 +38,12 @@ class Agent:
             response = self.model.generate(self.memory.to_messages())
             step = self._execute(response)
 
-            display.print_action_step(step)
+            self.output.on_step(step)
             self.memory.steps.append(step)
 
             match step:
                 case memory.ActionStep(final_answer=final_answer) if final_answer:
-                    display.print_final_answer(final_answer)
+                    self.output.on_final_answer(final_answer)
                     return final_answer
 
             if len(self.memory.steps) > self.max_steps:
@@ -49,7 +52,7 @@ class Agent:
     def _execution_step(self) -> memory.ActionStep:
         response = self.model.generate(self.memory.to_messages())
         step = self._execute(response)
-        display.print_action_step(step)
+        self.output.on_step(step)
         self.memory.steps.append(step)
         return step
 
@@ -94,9 +97,10 @@ class Agent:
 
 if __name__ == "__main__":
     from larkin.models.google import GoogleModel
+    from larkin.output import RichOutput
 
     m = GoogleModel("gemini-2.5-pro")
-    agent = Agent(model=m)
+    agent = Agent(model=m, output=RichOutput())
     agent.run(
         "Find the result of summarizing 452324562364, 124151435 ans 1242534 and then dividing that by 12"
     )
