@@ -5,7 +5,7 @@ from typing import NoReturn
 
 import starlark as sl
 
-from larkin.tools import ToolFunction
+from larkin.tools import Tool
 
 
 @dataclasses.dataclass
@@ -21,7 +21,7 @@ class ScriptError:
 
 
 class ScriptWorkspace:
-    def __init__(self, tools: list[ToolFunction]):
+    def __init__(self, tools: list[Tool]):
         self.globals = sl.Globals.standard()
         self.mod = sl.Module()
 
@@ -30,7 +30,7 @@ class ScriptWorkspace:
 
         # Register user-provided tools
         for tool in tools:
-            self.mod.add_callable(tool.__name__, tool)
+            self.mod.add_callable(tool.name, tool)
 
         # Always-available builtins
         def _print(*args: object) -> None:

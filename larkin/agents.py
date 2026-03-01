@@ -6,23 +6,24 @@ class Agent:
         self,
         system_prompt: str,
         model: models.Model,
-        tool_functions: list[tools.ToolFunction] | None = None,
+        tool_functions: list[tools.Tool] | None = None,
         max_steps: int = 64,
         planning_interval: int = 16,
     ):
-        if tool_functions is None:
-            tool_functions = tools.default_tools(model)
+        resolved_tools: list[tools.Tool] = (
+            tool_functions if tool_functions is not None else tools.default_tools(model)
+        )
 
         self.max_steps = max_steps
         self.model = model
         self.planning_interval = planning_interval
 
         # Inject auto-generated tool docs into the system prompt
-        tool_docs = tools.generate_tool_docs(tool_functions)
+        tool_docs = tools.generate_tool_docs(resolved_tools)
         populated_prompt = system_prompt.replace("{{tool_docs}}", tool_docs)
         self.memory = memory.AgentMemory(populated_prompt)
 
-        self.workspace = scripting.ScriptWorkspace(tool_functions)
+        self.workspace = scripting.ScriptWorkspace(resolved_tools)
 
     def run(self, task: str) -> str:
         self.memory.steps.append(memory.TaskStep(task))

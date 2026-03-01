@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import inspect
 import io
@@ -16,29 +18,48 @@ MAX_TOOL_OUTPUT = 30_000
 
 
 # ---------------------------------------------------------------------------
-# Tool introspection and doc generation
+# Tool protocol and concrete implementation
 # ---------------------------------------------------------------------------
 
 
-class ToolFunction(t.Protocol):
-    __name__: str
+@dataclasses.dataclass(frozen=True)
+class ToolParam:
+    name: str
+    type: str
+
+
+class Tool(t.Protocol):
+    """Protocol for tools that can be registered in the scripting sandbox.
+
+    Any object with the right attributes and __call__ satisfies this protocol.
+    Use Tool.from_function() or FunctionTool.from_function() to wrap a plain
+    Python function.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def description(self) -> str: ...
+
+    @property
+    def parameters(self) -> list[ToolParam]: ...
+
+    @property
+    def return_type(self) -> str | None: ...
 
     def __call__(self, *args: t.Any, **kwargs: t.Any) -> t.Any: ...
 
-
-@dataclasses.dataclass
-class ToolInfo:
-    name: str
-    params: list[tuple[str, str]]
-    return_annotation: str | None
-    docstring: str
+    @staticmethod
+    def from_function(fn: t.Callable[..., t.Any]) -> FunctionTool:
+        """Convenience factory: wrap a typed, docstring'd function as a Tool."""
+        return FunctionTool.from_function(fn)
 
 
 def _annotation_str(annotation: t.Any) -> str:
     """Convert a type annotation to a readable string."""
     if annotation is inspect.Parameter.empty:
         return "Any"
-    # Generic aliases like list[str], dict[str, int] — use their string repr
     if hasattr(annotation, "__args__"):
         return str(annotation).replace("typing.", "")
     if hasattr(annotation, "__name__"):
@@ -46,40 +67,87 @@ def _annotation_str(annotation: t.Any) -> str:
     return str(annotation).replace("typing.", "")
 
 
-def tool_info(fn: ToolFunction) -> ToolInfo:
-    """Extract metadata from a tool function using inspect."""
-    sig = inspect.signature(fn)
-    hints = t.get_type_hints(fn)
+class FunctionTool:
+    """Concrete Tool implementation that wraps a plain Python function."""
 
-    params: list[tuple[str, str]] = []
-    for name, param in sig.parameters.items():
-        annotation = hints.get(name, param.annotation)
-        params.append((name, _annotation_str(annotation)))
+    def __init__(
+        self,
+        *,
+        name: str,
+        description: str,
+        parameters: list[ToolParam],
+        return_type: str | None,
+        fn: t.Callable[..., t.Any],
+    ):
+        self._name = name
+        self._description = description
+        self._parameters = parameters
+        self._return_type = return_type
+        self._fn = fn
 
-    ret = hints.get("return", sig.return_annotation)
-    return_annotation = None if ret is inspect.Parameter.empty else _annotation_str(ret)
+    @property
+    def name(self) -> str:
+        return self._name
 
-    docstring = inspect.getdoc(fn) or ""
+    @property
+    def description(self) -> str:
+        return self._description
 
-    return ToolInfo(
-        name=fn.__name__,
-        params=params,
-        return_annotation=return_annotation,
-        docstring=docstring,
-    )
+    @property
+    def parameters(self) -> list[ToolParam]:
+        return self._parameters
+
+    @property
+    def return_type(self) -> str | None:
+        return self._return_type
+
+    def __call__(self, *args: t.Any, **kwargs: t.Any) -> t.Any:
+        return self._fn(*args, **kwargs)
+
+    @staticmethod
+    def from_function(fn: t.Callable[..., t.Any]) -> FunctionTool:
+        """Build a FunctionTool by introspecting a typed, docstring'd function."""
+        sig = inspect.signature(fn)
+        hints = t.get_type_hints(fn)
+
+        params: list[ToolParam] = []
+        for pname, param in sig.parameters.items():
+            annotation = hints.get(pname, param.annotation)
+            params.append(ToolParam(name=pname, type=_annotation_str(annotation)))
+
+        ret = hints.get("return", sig.return_annotation)
+        return_type = None if ret is inspect.Parameter.empty else _annotation_str(ret)
+
+        name = getattr(fn, "__name__", None)
+        if name is None:
+            raise ValueError("from_function requires a function with __name__")
+
+        return FunctionTool(
+            name=name,
+            description=inspect.getdoc(fn) or "",
+            parameters=params,
+            return_type=return_type,
+            fn=fn,
+        )
+
+    def __repr__(self) -> str:
+        return f"FunctionTool({self._name!r})"
 
 
-def generate_tool_docs(tools: list[ToolFunction]) -> str:
-    """Generate Starlark-style documentation for a list of tool functions."""
+# ---------------------------------------------------------------------------
+# Doc generation
+# ---------------------------------------------------------------------------
+
+
+def generate_tool_docs(tools: list[Tool]) -> str:
+    """Generate Starlark-style documentation for a list of Tools."""
     parts: list[str] = []
-    for fn in tools:
-        info = tool_info(fn)
+    for tool in tools:
+        param_str = ", ".join(f"{p.name}: {p.type}" for p in tool.parameters)
+        ret = f" -> {tool.return_type}" if tool.return_type else ""
+        signature = f"def {tool.name}({param_str}){ret}:"
 
-        param_str = ", ".join(f"{name}: {typ}" for name, typ in info.params)
-        ret = f" -> {info.return_annotation}" if info.return_annotation else ""
-        signature = f"def {info.name}({param_str}){ret}:"
-
-        doc_lines = info.docstring.strip().splitlines()
+        doc_lines = tool.description.strip().splitlines()
         indented_doc = "\n".join(
             f"    {line}" if line.strip() else "" for line in doc_lines
         )
@@ -173,6 +241,13 @@ def extract_links(markdown: str) -> list[tuple[str, str]]:
     return all_links
 
 
+# Module-level Tool objects for built-in functions
+VISIT_WEBPAGE = FunctionTool.from_function(visit_webpage)
+DOWNLOAD_PDF = FunctionTool.from_function(download_pdf)
+WEB_SEARCH = FunctionTool.from_function(web_search)
+EXTRACT_LINKS = FunctionTool.from_function(extract_links)
+
+
 # ---------------------------------------------------------------------------
 # Model-dependent tool factories
 # ---------------------------------------------------------------------------
@@ -193,7 +268,7 @@ Only respond with exactly one category string, exactly as specified in the list 
 """
 
 
-def make_analyze_tool(model: models.Model) -> ToolFunction:
+def make_analyze_tool(model: models.Model) -> FunctionTool:
     """Create an analyze tool that delegates to the given model."""
 
     def analyze(instruction: str, text: str) -> str:
@@ -222,10 +297,10 @@ def make_analyze_tool(model: models.Model) -> ToolFunction:
         assert isinstance(res.content[0], models.TextContent)
         return res.content[0].text.strip()
 
-    return analyze
+    return FunctionTool.from_function(analyze)
 
 
-def make_categorize_tool(model: models.Model) -> ToolFunction:
+def make_categorize_tool(model: models.Model) -> FunctionTool:
     """Create a categorize tool that delegates to the given model."""
 
     def categorize(instruction: str, text: str, categories: list[str]) -> str:
@@ -262,16 +337,16 @@ def make_categorize_tool(model: models.Model) -> ToolFunction:
             f"tool did not pick a valid category: {raw} [categories: {categories}]"
         )
 
-    return categorize
+    return FunctionTool.from_function(categorize)
 
 
-def default_tools(model: models.Model) -> list[ToolFunction]:
+def default_tools(model: models.Model) -> list[Tool]:
     """Return the default set of tools for an agent."""
     return [
-        visit_webpage,
-        download_pdf,
-        web_search,
-        extract_links,
+        VISIT_WEBPAGE,
+        DOWNLOAD_PDF,
+        WEB_SEARCH,
+        EXTRACT_LINKS,
         make_analyze_tool(model),
         make_categorize_tool(model),
     ]
