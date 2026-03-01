@@ -275,7 +275,7 @@ def st_script(draw, params: list[ToolParam]) -> list[Stmt]:
         ]
     else:
         attack = [ExprStmt(Call("target", call_args))]
-    body = draw(st_stmts(attack))
+    body = draw(st_stmts(attack))  # type: ignore[missing-argument]  # hypothesis ParamSpec
     return preamble + body
 
 
@@ -284,11 +284,11 @@ def st_script(draw, params: list[ToolParam]) -> list[Stmt]:
 def test_sentinel_never_leaks(data) -> None:
     """Opaque values are blocked even through control flow and rebinding."""
     # Generate a tool with mixed Opaque / normal args
-    params = data.draw(st_tool_params())
+    params = data.draw(st_tool_params())  # type: ignore[missing-argument]  # hypothesis ParamSpec
     tool = _make_target_tool(params)
 
     # Generate a script that uses the tool in lots of ways
-    stmts = data.draw(st_script(params))
+    stmts = data.draw(st_script(params))  # type: ignore[missing-argument]  # hypothesis ParamSpec
     script = render(stmts)
 
     ws = ScriptWorkspace([_GET_SECRET, tool])

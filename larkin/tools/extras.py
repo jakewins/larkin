@@ -268,8 +268,6 @@ def default_tools(model: models.Model) -> list[Tool]:
         DOWNLOAD_PDF,
         WEB_SEARCH,
         EXTRACT_LINKS,
-        OPAQUE_VISIT_WEBPAGE,
         make_analyze_tool(model),
         make_categorize_tool(model),
-        make_opaque_categorize_tool(model),
     ]
