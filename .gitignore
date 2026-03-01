@@ -6,6 +6,8 @@ target/
 __pycache__/
 .venv/
 
+.hypothesis
+
 # LLM plans
 .plans/
 
