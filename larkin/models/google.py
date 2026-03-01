@@ -1,3 +1,4 @@
+import json
 import time
 
 import google.genai
@@ -14,23 +15,13 @@ from larkin.models import (
     TextContent,
 )
 
-STARLARK_TOOL_SCHEMA = google.genai.types.FunctionDeclaration(
-    name="exec_starlark",
-    description="Executes the provided starlark script, and associates the execution with the provided thought process",
-    parameters=google.genai.types.Schema(
-        type=google.genai.types.Type.OBJECT,
-        properties={
-            "thought": google.genai.types.Schema(
-                type=google.genai.types.Type.STRING,
-                description="Thought process behind this code. What are we trying to achieve, how will the code achieve it?",
-            ),
-            "code": google.genai.types.Schema(
-                type=google.genai.types.Type.STRING,
-                description="Starlark script, the script can call the functions outlined in the system prompt",
-            ),
-        },
-        required=["thought", "code"],
-    ),
+STARLARK_RESPONSE_SCHEMA = google.genai.types.Schema(
+    type=google.genai.types.Type.OBJECT,
+    properties={
+        "thought": google.genai.types.Schema(type=google.genai.types.Type.STRING),
+        "code": google.genai.types.Schema(type=google.genai.types.Type.STRING),
+    },
+    required=["thought", "code"],
 )
 
 
@@ -53,16 +44,16 @@ class GoogleModel(Model):
             case _:
                 system_instruction = None
 
-        tools = []
         if with_code_tool:
-            tools.append(
-                google.genai.types.Tool(function_declarations=[STARLARK_TOOL_SCHEMA])
+            config = google.genai.types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_schema=STARLARK_RESPONSE_SCHEMA,
             )
-
-        config = google.genai.types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            tools=tools,
-        )
+        else:
+            config = google.genai.types.GenerateContentConfig(
+                system_instruction=system_instruction,
+            )
 
         while True:
             try:
@@ -84,41 +75,22 @@ class GoogleModel(Model):
             )
 
         if with_code_tool:
-            for part in response.parts:
-                if part.function_call:
-                    # The model is prone to calling final_answer as a tool rather than as a starlark code block
-                    # paper over that problem
-                    assert part.function_call.args is not None
-                    if part.function_call.name == "final_answer":
-                        text_no_triple_quotes = part.function_call.args.get(
-                            "answer", ""
-                        ).replace("'''", "")
-                        return ChatMessage(
-                            MessageRole.CODE_EXEC,
-                            [
-                                CodeContent(
-                                    thought="<< system: model invoked final_answer as tool, remapping to code >>",
-                                    code=f"final_answer(answer='''{text_no_triple_quotes}''')",
-                                    meta={
-                                        "google.function_call_id": part.function_call.id,
-                                        "google.thought_signature": part.thought_signature,
-                                    },
-                                )
-                            ],
-                        )
-                    return ChatMessage(
-                        MessageRole.CODE_EXEC,
-                        [
-                            CodeContent(
-                                thought=part.function_call.args.get("thought", ""),
-                                code=part.function_call.args["code"],
-                                meta={
-                                    "google.function_call_id": part.function_call.id,
-                                    "google.thought_signature": part.thought_signature,
-                                },
-                            )
-                        ],
+            assert response.text is not None
+            parsed = json.loads(response.text)
+            return ChatMessage(
+                MessageRole.CODE_EXEC,
+                [
+                    CodeContent(
+                        thought=parsed.get("thought", ""),
+                        code=parsed["code"],
+                        meta={
+                            "google.thought_signature": response.parts[
+                                -1
+                            ].thought_signature,
+                        },
                     )
+                ],
+            )
 
         return ChatMessage(
             MessageRole.ASSISTANT,
@@ -156,37 +128,16 @@ class GoogleModel(Model):
                 )
             case CodeContent(thought=thought, code=code, meta=meta):
                 return google.genai.types.Part(
-                    function_call=google.genai.types.FunctionCall(
-                        name="exec_starlark",
-                        id=meta.get("google.function_call_id"),
-                        args={
-                            "thought": thought,
-                            "code": code,
-                        },
-                    ),
+                    text=json.dumps({"thought": thought, "code": code}),
                     thought_signature=meta.get("google.thought_signature"),
                 )
-            case CodeSuccess(observations=observations, meta=meta):
+            case CodeSuccess(observations=observations):
                 return google.genai.types.Part(
-                    function_response=google.genai.types.FunctionResponse(
-                        name="exec_starlark",
-                        id=meta.get("google.function_call_id"),
-                        response={
-                            "output": observations,
-                        },
-                    ),
-                    thought_signature=meta.get("google.thought_signature"),
+                    text=f"Observation: {observations}",
                 )
-            case CodeError(error=error, meta=meta):
+            case CodeError(error=error):
                 return google.genai.types.Part(
-                    function_response=google.genai.types.FunctionResponse(
-                        name="exec_starlark",
-                        id=meta.get("google.function_call_id"),
-                        response={
-                            "error": error,
-                        },
-                    ),
-                    thought_signature=meta.get("google.thought_signature"),
+                    text=f"Error: {error}",
                 )
             case other:
                 raise ValueError(other)
