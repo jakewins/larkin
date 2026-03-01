@@ -89,7 +89,9 @@ class Agent:
 
 
 if __name__ == "__main__":
-    m = models.GoogleModel("gemini-2.5-pro")
+    from larkin.models.google import GoogleModel
+
+    m = GoogleModel("gemini-2.5-pro")
     agent = Agent(prompts.SYSTEM_PROMPT, model=m)
     agent.run(
         "Find the result of summarizing 452324562364, 124151435 ans 1242534 and then dividing that by 12"
