@@ -180,7 +180,7 @@ def test_opaque_cant_bypass_():
 
 def test_opaque_visit_webpage():
     """opaque_visit_webpage returns an opaque handle whose inner value is the page content."""
-    from larkin.builtin_tools import opaque_visit_webpage
+    from larkin.tools.extras import opaque_visit_webpage
 
     ov = opaque_visit_webpage("https://www.google.com")
     assert isinstance(ov, OpaqueValue)

@@ -14,7 +14,7 @@ class Agent:
         if tool_functions is not None:
             resolved_tools = tool_functions
         else:
-            from larkin.builtin_tools import default_tools
+            from larkin.tools.extras import default_tools
 
             resolved_tools = default_tools(model)
 

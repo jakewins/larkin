@@ -1,4 +1,5 @@
-from larkin import builtin_tools, scripting
+from larkin import scripting
+from larkin.tools import extras as tool_extras
 from larkin.tools import Tool, FunctionTool, ToolParam, generate_tool_docs
 
 from larkin.scripting_test import _ws
@@ -100,7 +101,7 @@ def test_extract_links():
         "[GitHub](https://github.com) for more info.\n"
         "Also see [Docs](https://docs.example.com/path?q=1)."
     )
-    res = _ws(builtin_tools.EXTRACT_LINKS).eval(
+    res = _ws(tool_extras.EXTRACT_LINKS).eval(
         f"links = extract_links({md!r})\nprint(links)\n"
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
@@ -114,7 +115,7 @@ def test_extract_links_bare_urls():
         "Visit [Google](https://google.com) or "
         "just go to <https://bare-link.example.com> for more."
     )
-    res = _ws(builtin_tools.EXTRACT_LINKS).eval(
+    res = _ws(tool_extras.EXTRACT_LINKS).eval(
         f"links = extract_links({md!r})\nprint(links)\n"
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
@@ -124,14 +125,14 @@ def test_extract_links_bare_urls():
 
 
 def test_web_search():
-    res = _ws(builtin_tools.WEB_SEARCH).eval(
+    res = _ws(tool_extras.WEB_SEARCH).eval(
         "shops = web_search('garden shops selling apple trees near New York City')\nprint(shops)"
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
 
 
 def test_visit_webpage():
-    res = _ws(builtin_tools.VISIT_WEBPAGE).eval(
+    res = _ws(tool_extras.VISIT_WEBPAGE).eval(
         "content = visit_webpage('https://www.google.com')\nprint(len(content) > 0)\n"
     )
     assert isinstance(res, scripting.ScriptOk), f"Expected ScriptOk, got: {res}"
@@ -139,7 +140,7 @@ def test_visit_webpage():
 
 
 def test_download_pdf():
-    res = _ws(builtin_tools.DOWNLOAD_PDF).eval("""
+    res = _ws(tool_extras.DOWNLOAD_PDF).eval("""
 pdf_content = download_pdf(url='https://pdfobject.com/pdf/sample.pdf')
 print(pdf_content)
 """)
